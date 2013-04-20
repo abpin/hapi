@@ -14,12 +14,12 @@ var ctx = {
 
 var oneHandler = function (request) {
 
-    request.reply.view('index', ctx).send();
+    request.reply.view('index', ctx);
 };
 
 var twoHandler = function (request) {
 
-    request.reply.view('handlebars', ctx).send();
+    request.reply.view('handlebars', ctx);
 };
 
 
@@ -27,17 +27,17 @@ internals.main = function () {
 
     var options = {
         views: {
-            path: __dirname + '/templates',
             engines: {
-                'html': { module: 'handlebars' },
-                'jade': { module: 'jade' }
-            }
+                'html': 'handlebars',
+                'jade': 'jade'
+            },
+            path: __dirname + '/templates',
         }
     };
 
     var server = new Hapi.Server(3000, options);
-    server.addRoute({ method: 'GET', path: '/one', handler: oneHandler });
-    server.addRoute({ method: 'GET', path: '/two', handler: twoHandler });
+    server.route({ method: 'GET', path: '/one', handler: oneHandler });
+    server.route({ method: 'GET', path: '/two', handler: twoHandler });
     server.start();
 };
 

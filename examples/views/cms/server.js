@@ -13,55 +13,50 @@ var view = function (viewName) {
 
     return function (request) {
 
-        request.reply.view(viewName, { title: viewName }).send();
+        request.reply.view(viewName, { title: viewName });
     };
 };
 
 
 var getPages = function (request) {
 
-    request.reply.view('index', { pages: Object.keys(Pages.getAll()), title: 'All pages' }).send();
+    request.reply.view('index', { pages: Object.keys(Pages.getAll()), title: 'All pages' });
 };
 
 
 var getPage = function (request) {
 
-    request.reply.view('page', { page: Pages.getPage(request.params.page), title: request.params.page }).send();
+    request.reply.view('page', { page: Pages.getPage(request.params.page), title: request.params.page });
 };
 
 
 var createPage = function (request) {
 
     Pages.savePage(request.payload.name, request.payload.contents);
-    request.reply.view('page', { page: Pages.getPage(request.payload.name), title: 'Create page' }).send();
+    request.reply.view('page', { page: Pages.getPage(request.payload.name), title: 'Create page' });
 };
 
 
 var showEditForm = function (request) {
 
-    request.reply.view('edit', { page: Pages.getPage(request.params.page), title: 'Edit: ' + request.params.page }).send();
+    request.reply.view('edit', { page: Pages.getPage(request.params.page), title: 'Edit: ' + request.params.page });
 };
 
 
 var updatePage = function (request) {
 
     Pages.savePage(request.params.page, request.payload.contents);
-    request.reply.view('page', { page: Pages.getPage(request.params.page), title: request.params.page }).send();
+    request.reply.view('page', { page: Pages.getPage(request.params.page), title: request.params.page });
 };
 
 internals.main = function () {
 
     var options = {
         views: {
+            engines: { html: 'handlebars' },
             path: Path.join(__dirname, 'views'),
-            engine: {
-                module: 'handlebars',
-                extension: 'html'
-            },
             layout: true,
-            partials: {
-                path: Path.join(__dirname, 'views', 'partials')
-            }
+            partialsPath: Path.join(__dirname, 'views', 'partials')
         },
         state: {
             cookies: {
@@ -71,12 +66,12 @@ internals.main = function () {
     };
 
     var server = new Hapi.Server(3000, options);
-    server.addRoute({ method: 'GET', path: '/', handler: getPages });
-    server.addRoute({ method: 'GET', path: '/pages/{page}', handler: getPage });
-    server.addRoute({ method: 'GET', path: '/create', handler: view('create') });
-    server.addRoute({ method: 'POST', path: '/create', handler: createPage });
-    server.addRoute({ method: 'GET', path: '/pages/{page}/edit', handler: showEditForm });
-    server.addRoute({ method: 'POST', path: '/pages/{page}/edit', handler: updatePage });
+    server.route({ method: 'GET', path: '/', handler: getPages });
+    server.route({ method: 'GET', path: '/pages/{page}', handler: getPage });
+    server.route({ method: 'GET', path: '/create', handler: view('create') });
+    server.route({ method: 'POST', path: '/create', handler: createPage });
+    server.route({ method: 'GET', path: '/pages/{page}/edit', handler: showEditForm });
+    server.route({ method: 'POST', path: '/pages/{page}/edit', handler: updatePage });
     server.start();
 };
 

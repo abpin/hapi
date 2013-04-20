@@ -1,10 +1,10 @@
 // Load modules
 
-var Chai = require('chai');
+var Lab = require('lab');
 var Shot = require('shot');
-var Hapi = require('../helpers');
-var Payload = process.env.TEST_COV ? require('../../lib-cov/payload') : require('../../lib/payload');
-var Route = process.env.TEST_COV ? require('../../lib-cov/route') : require('../../lib/route');
+var Hapi = require('../..');
+var Payload = require('../../lib/payload');
+var Route = require('../../lib/route');
 
 
 // Declare internals
@@ -14,7 +14,11 @@ var internals = {};
 
 // Test shortcuts
 
-var expect = Chai.expect;
+var expect = Lab.expect;
+var before = Lab.before;
+var after = Lab.after;
+var describe = Lab.experiment;
+var it = Lab.test;
 
 
 describe('Payload', function () {
@@ -40,7 +44,7 @@ describe('Payload', function () {
                 method: 'get',
                 raw: {
                     req: {
-                        resume: function () { }
+                        read: function () { }
                     }
                 }
             };
@@ -59,35 +63,16 @@ describe('Payload', function () {
                 _route: new Route({ method: 'delete', path: '/', handler: function () { } }, server),
                 raw: {
                     req: {
-                        resume: function () { }
+                        read: function () { }
                     }
                 }
             };
+
+            request.route = request._route.settings;
 
             Payload.read(request, function (result) {
 
                 expect(result).not.to.exist;
-                done();
-            });
-        });
-
-        it('passes an error to the callback whenever an unsupported mime type is read', function (done) {
-            var request = {
-                _timestamp: Date.now(),
-                method: 'post',
-                _route: new Route({ method: 'post', path: '/', handler: function () { } }, server),
-                raw: {
-                    req: {
-                        headers: {
-                            'content-type': 'blah'
-                        }
-                    }
-                }
-            };
-
-            Payload.read(request, function (err) {
-
-                expect(err).to.be.an.instanceOf(Error);
                 done();
             });
         });
@@ -105,6 +90,8 @@ describe('Payload', function () {
                     },
                     server: server
                 };
+
+                request.route = request._route.settings;
 
                 Payload.read(request, function (err) {
 
@@ -128,6 +115,8 @@ describe('Payload', function () {
                     },
                     server: server
                 };
+
+                request.route = request._route.settings;
 
                 Payload.read(request, function (err) {
 
@@ -153,6 +142,8 @@ describe('Payload', function () {
                     server: server
                 };
 
+                request.route = request._route.settings;
+
                 Payload.read(request, function (err) {
 
                     expect(err).to.not.exist;
@@ -175,6 +166,8 @@ describe('Payload', function () {
                     },
                     server: server
                 };
+
+                request.route = request._route.settings;
 
                 Payload.read(request, function (err) {
 
@@ -199,6 +192,8 @@ describe('Payload', function () {
                     },
                     server: server
                 };
+
+                request.route = request._route.settings;
 
                 Payload.read(request, function (err) {
 

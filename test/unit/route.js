@@ -1,9 +1,9 @@
 // Load modules
 
-var Chai = require('chai');
-var Hapi = require('../helpers');
-var Route = process.env.TEST_COV ? require('../../lib-cov/route') : require('../../lib/route');
-var Defaults = process.env.TEST_COV ? require('../../lib-cov/defaults') : require('../../lib/defaults');
+var Lab = require('lab');
+var Hapi = require('../..');
+var Route = require('../../lib/route');
+var Defaults = require('../../lib/defaults');
 
 
 // Declare internals
@@ -13,12 +13,16 @@ var internals = {};
 
 // Test shortcuts
 
-var expect = Chai.expect;
+var expect = Lab.expect;
+var before = Lab.before;
+var after = Lab.after;
+var describe = Lab.experiment;
+var it = Lab.test;
 
 
 describe('Route', function () {
 
-    var server = { settings: Defaults.server };
+    var server = new Hapi.Server(Defaults.server);
 
     var _handler = function (request) {
 
@@ -41,7 +45,7 @@ describe('Route', function () {
 
             var route = new Route({ path: '/test', handler: _handler }, server);
         };
-        expect(fn).throws(Error, 'Route options missing method');
+        expect(fn).throws(Error);
         done();
     });
 
@@ -61,7 +65,7 @@ describe('Route', function () {
 
             var route = new Route({ path: '/test', method: 'get', handler: null }, server);
         };
-        expect(fn).throws(Error, 'Handler must appear once and only once');
+        expect(fn).throws(Error);
         done();
     });
 
@@ -157,7 +161,7 @@ describe('Route', function () {
 
                 it('process the path \'' + path + '\' as ' + fingerprint, function (done) {
 
-                    var route = new Route({ path: path, method: 'get', handler: function () { } }, { settings: { router: { isCaseSensitive: true } } });
+                    var route = new Route({ path: path, method: 'get', handler: function () { } }, new Hapi.Server({ router: { isCaseSensitive: true } }));
                     expect(route.fingerprint).to.equal(fingerprint);
                     done();
                 });
@@ -232,6 +236,11 @@ describe('Route', function () {
                         p1: 'a',
                         p2: undefined
                     }
+                },
+                '/{p*}': {
+                    '/path/': {
+                        p: 'path/'
+                    }
                 }
             };
 
@@ -240,7 +249,8 @@ describe('Route', function () {
 
                 function test(path, matches, isCaseSensitive) {
 
-                    var route = new Route({ path: path, method: 'get', handler: function () { } }, { settings: { router: { isCaseSensitive: isCaseSensitive } } });
+                    var server = new Hapi.Server({ router: { isCaseSensitive: isCaseSensitive } });
+                    var route = new Route({ path: path, method: 'get', handler: function () { } }, server);
                     var mkeys = Object.keys(matches);
                     for (var m = 0, ml = mkeys.length; m < ml; ++m) {
                         function match(route, match, result) {

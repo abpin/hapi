@@ -1,9 +1,9 @@
 // Load modules
 
-var Chai = require('chai');
+var Lab = require('lab');
 var Shot = require('shot');
-var Hapi = require('../helpers');
-var Request = process.env.TEST_COV ? require('../../lib-cov/request') : require('../../lib/request');
+var Hapi = require('../..');
+var Request = require('../../lib/request');
 
 
 // Declare internals
@@ -13,12 +13,16 @@ var internals = {};
 
 // Test shortcuts
 
-var expect = Chai.expect;
+var expect = Lab.expect;
+var before = Lab.before;
+var after = Lab.after;
+var describe = Lab.experiment;
+var it = Lab.test;
 
 
 describe('Request', function () {
 
-    var server = new Hapi.server('0.0.0.0', 0);
+    var server = new Hapi.Server();
 
     var _req = null;
     var _res = null;
@@ -94,33 +98,7 @@ describe('Request', function () {
         done();
     });
 
-    it('assigns _debug when created request has debug querystring key', function (done) {
-
-        var req = Hapi.Utils.clone(_req);
-        req.pause = function () { };
-        var debugServer= new Hapi.Server(0, { debug: { queryKey: 'debug' } });
-
-        req.url = 'http://localhost/?debug=test';
-
-        var request = new Request(debugServer, req, _res);
-
-        expect(request._debug).to.exist;
-        done();
-    });
-
     describe('#_setMethod', function () {
-
-        it('throws an error when a null method is passed in', function (done) {
-
-            var fn = function () {
-
-                var request = new Request(server, _req, _res);
-                request._setMethod(null);
-            };
-
-            expect(fn).throws(Error, 'method must be provided');
-            done();
-        });
 
         it('changes method with a lowercase version of the value passed in', function (done) {
 
@@ -153,8 +131,8 @@ describe('Request', function () {
         it('adds a log event to the request', function (done) {
 
             var request = new Request(server, _req, _res);
-            request.log('1', 'log event 1');
-            request.log(['2'], 'log event 2');
+            request.log('1', 'log event 1', Date.now());
+            request.log(['2'], 'log event 2', new Date(Date.now()));
             request.log(['3', '4']);
             request.log(['1', '4']);
             request.log(['2', '3']);
@@ -163,8 +141,30 @@ describe('Request', function () {
 
             expect(request.getLog('1').length).to.equal(2);
             expect(request.getLog('4').length).to.equal(4);
+            expect(request.getLog(['4']).length).to.equal(4);
             expect(request.getLog('0').length).to.equal(0);
             expect(request.getLog().length).to.be.above(7);
+            done();
+        });
+
+        it('doesn\'t throw an error when logging without data and debug is configured', function (done) {
+
+            var debugServer = new Hapi.Server({ debug: { request: ['uncaught'] } });
+            var request = new Request(debugServer, _req, _res);
+
+            var fn = function () {
+
+                request.log('uncaught', null, Date.now());
+            };
+
+            var orig = console.error;
+            console.error = function (msg) {
+
+                expect(msg).to.equal('Unmonitored error: uncaught');
+                console.error = orig;
+            };
+
+            expect(fn).to.not.throw(Error);
             done();
         });
     });
@@ -189,7 +189,7 @@ describe('Request', function () {
 
         it('normalizes a path when normalization is enabled', function (done) {
 
-            var normServer = new Hapi.server({ router: { normalizeRequestPath: true } });
+            var normServer = new Hapi.Server({ router: { normalizeRequestPath: true } });
 
             var request = new Request(normServer, _req, _res);
             var url = 'http://localhost' + rawPath + '?param1=something';
