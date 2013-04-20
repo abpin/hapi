@@ -1,10 +1,10 @@
 // Load modules
 
-var Chai = require('chai');
+var Lab = require('lab');
 var Iron = require('iron');
-var Hapi = require('../helpers');
-var State = process.env.TEST_COV ? require('../../lib-cov/state') : require('../../lib/state');
-var Defaults = process.env.TEST_COV ? require('../../lib-cov/defaults') : require('../../lib/defaults');
+var Hapi = require('../..');
+var State = require('../../lib/state');
+var Defaults = require('../../lib/defaults');
 
 
 // Declare internals
@@ -14,7 +14,11 @@ var internals = {};
 
 // Test shortcuts
 
-var expect = Chai.expect;
+var expect = Lab.expect;
+var before = Lab.before;
+var after = Lab.after;
+var describe = Lab.experiment;
+var it = Lab.test;
 
 
 describe('State', function () {
@@ -97,6 +101,7 @@ describe('State', function () {
             pass('a=dGVzdA; a=dGVzdA', { a: ['test', 'test'] }, null, { a: { encoding: 'base64' } });
             pass('key=dGVzdA==', { key: 'test' }, null, { key: { encoding: 'base64' } });
             pass('key=dGVzdA', { key: 'test' }, null, { key: { encoding: 'base64' } });
+            pass('key=dGVzdA', { key: 'dGVzdA' }, null, { key: { encoding: 'none' } });
             pass('key=eyJ0ZXN0aW5nIjoianNvbiJ9', { key: { testing: 'json' } }, null, { key: { encoding: 'base64json' } });
             pass('key=Fe26.1**0c68b200eb53406edefb402bb84e265d056bd11eb6bdebf3627a4fd7d1db6d79*XL-d8bUCuSwIwIYtmjXZ3g*4yVxLHFllbJWLSve93se4w*34771b9abd1cadeb0118e2a337c066f32cb44c223e3610533fc56ef3bbc53d56*HEfokc825mlBi-9jm1I94DWeZJ5uifVRD0kx_o-jKp8', { key: { a: 1 } }, null, { key: { encoding: 'iron', password: 'password' } });
             pass('sid=a=1&b=2&c=3%20x.2d75635d74c1a987f84f3ee7f3113b9a2ff71f89d6692b1089f19d5d11d140f8*xGhc6WvkE55V-TzucCl0NVFmbijeCwgs5Hf5tAVbSUo', { sid: { a: '1', b: '2', c: '3 x' } }, null, { sid: { encoding: 'form', sign: { password: 'password' } } });
@@ -105,7 +110,8 @@ describe('State', function () {
 
                 it('fails parsing cookie header: ' + header, function (done) {
 
-                    var ignore = false;
+                    var logged = false;
+                    var cleared = '';
 
                     var request = {
                         raw: {
@@ -121,18 +127,29 @@ describe('State', function () {
                                 state: settings || Defaults.server.state
                             }
                         },
-                        log: function (tags, data) {
-                            ignore = true;
+                        _log: function (tags, data) {
+                            
+                            logged = true;
+                        },
+                        clearState: function (name) {
+
+                            cleared = name;
                         }
                     };
 
                     State.parseCookies(request, function (err) {
 
-                        if (ignore) {
+                        if (request.server.settings.state.cookies.failAction !== 'error') {
                             expect(err).to.not.exist;
+                            expect(settings.failAction !== 'ignore' || logged).to.equal(true);
                         }
                         else {
                             expect(err).to.exist;
+                            expect(logged).to.equal(true);
+                        }
+
+                        if (request.server.settings.state.cookies.clearInvalid) {
+                            expect(cleared).to.equal('sid');
                         }
 
                         done();
@@ -161,6 +178,10 @@ describe('State', function () {
             fail('key=XeyJ0ZXN0aW5nIjoianNvbiJ9; key=XeyJ0ZXN0aW5dnIjoianNvbiJ9', setLog, { key: { encoding: 'base64json' } });
             fail('sid=a=1&b=2&c=3%20x', setLog, { sid: { encoding: 'form', sign: { password: 'password' } } });
             fail('sid=a=1&b=2&c=3%20x; sid=a=1&b=2&c=3%20x', setLog, { sid: { encoding: 'form', sign: { password: 'password' } } });
+
+            var clearInvalid = Hapi.utils.clone(Defaults.server.state);
+            clearInvalid.cookies.clearInvalid = true;
+            fail('sid=a=1&b=2&c=3%20x', clearInvalid, { sid: { encoding: 'form', sign: { password: 'password' } } });
         });
     });
 
@@ -182,7 +203,18 @@ describe('State', function () {
 
                 var expires = new Date(Date.now() + 3600);
                 expect(err).to.not.exist;
-                expect(header[0]).to.equal('sid=fihfieuhr9384hf; Max-Age=3600; Expires=' + expires.toUTCString() + '; Secure; HttpOnly; Domain=example.com; Path=/');
+                expect(header[0]).to.equal('sid=fihfieuhr9384hf; Max-Age=3; Expires=' + expires.toUTCString() + '; Secure; HttpOnly; Domain=example.com; Path=/');
+                done();
+            });
+        });
+
+        it('formats a header with null value', function (done) {
+
+            State.generateSetCookieHeader({ name: 'sid', options: { ttl: 3600, isSecure: true, isHttpOnly: true, path: '/', domain: 'example.com' } }, null, function (err, header) {
+
+                var expires = new Date(Date.now() + 3600);
+                expect(err).to.not.exist;
+                expect(header[0]).to.equal('sid=; Max-Age=3; Expires=' + expires.toUTCString() + '; Secure; HttpOnly; Domain=example.com; Path=/');
                 done();
             });
         });
@@ -194,7 +226,7 @@ describe('State', function () {
 
                 var expires = new Date(Date.now() + 3600);
                 expect(err).to.not.exist;
-                expect(header[0]).to.equal('sid=fihfieuhr9384hf; Max-Age=3600; Expires=' + expires.toUTCString() + '; Secure; HttpOnly; Domain=example.com; Path=/');
+                expect(header[0]).to.equal('sid=fihfieuhr9384hf; Max-Age=3; Expires=' + expires.toUTCString() + '; Secure; HttpOnly; Domain=example.com; Path=/');
                 done();
             });
         });
@@ -317,7 +349,7 @@ describe('State', function () {
 
                 var expires = new Date(Date.now() + 3600);
                 expect(err).to.not.exist;
-                expect(header[0]).to.equal('sid=fihfieuhr9384hf; Max-Age=3600; Expires=' + expires.toUTCString() + '; Secure; HttpOnly; Domain=example.com; Path=/');
+                expect(header[0]).to.equal('sid=fihfieuhr9384hf; Max-Age=3; Expires=' + expires.toUTCString() + '; Secure; HttpOnly; Domain=example.com; Path=/');
                 expect(header[1]).to.equal('pid=xyz');
                 done();
             });

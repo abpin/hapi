@@ -1,7 +1,7 @@
 // Load modules
 
-var Chai = require('chai');
-var Hapi = require('../helpers');
+var Lab = require('lab');
+var Hapi = require('../..');
 
 
 // Declare internals
@@ -11,7 +11,11 @@ var internals = {};
 
 // Test shortcuts
 
-var expect = Chai.expect;
+var expect = Lab.expect;
+var before = Lab.before;
+var after = Lab.after;
+var describe = Lab.experiment;
+var it = Lab.test;
 
 
 describe('Prerequesites', function () {
@@ -49,6 +53,11 @@ describe('Prerequesites', function () {
         next(Hapi.error.internal('boom'));
     };
 
+    var fetchException = function (request, next) {
+
+        a.b.c;
+    };
+
     var getFetch1 = function (request) {
 
         request.reply(request.pre.m5);
@@ -59,14 +68,19 @@ describe('Prerequesites', function () {
         request.reply(request.pre.m1);
     };
 
-    var server = new Hapi.Server('0.0.0.0', 0, { batch: true });
+    var server = new Hapi.Server('0.0.0.0', 0, { debug: false });
 
-    server.addHelper('user', function (id, next) {
+    server.helper('user', function (id, next) {
 
-        return next({ id: id });
+        return next({ id: id, name: 'Bob' });
     });
 
-    server.addRoutes([
+    server.helper('name', function (user, next) {
+
+        return next(user.name);
+    });
+
+    server.route([
         {
             method: 'GET',
             path: '/fetch1',
@@ -104,6 +118,17 @@ describe('Prerequesites', function () {
         },
         {
             method: 'GET',
+            path: '/fetchException',
+            config: {
+                pre: [
+                    { method: fetch1, assign: 'm1', mode: 'parallel' },
+                    { method: fetchException, assign: 'm6' }
+                ],
+                handler: getFetch2
+            }
+        },
+        {
+            method: 'GET',
             path: '/user/{id}',
             config: {
                 pre: [
@@ -112,6 +137,20 @@ describe('Prerequesites', function () {
                 handler: function () {
 
                     return this.reply(this.pre.user);
+                }
+            }
+        },
+        {
+            method: 'GET',
+            path: '/user/{id}/name',
+            config: {
+                pre: [
+                    'user(params.id)',
+                    'name(pre.user)'
+                ],
+                handler: function () {
+
+                    return this.reply(this.pre.name);
                 }
             }
         }
@@ -148,9 +187,18 @@ describe('Prerequesites', function () {
         });
     });
 
-    it('returns error is prerequisite returns error', function (done) {
+    it('returns error if prerequisite returns error', function (done) {
 
         makeRequest('/fetch3', function (res) {
+
+            expect(res.code).to.equal(500);
+            done();
+        });
+    });
+
+    it('returns 500 if prerequisite throws', function (done) {
+
+        makeRequest('/fetchException', function (res) {
 
             expect(res.code).to.equal(500);
             done();
@@ -161,7 +209,16 @@ describe('Prerequesites', function () {
 
         makeRequest('/user/5', function (res) {
 
-            expect(res).to.deep.equal({ id: '5' });
+            expect(res).to.deep.equal({ id: '5', name: 'Bob' });
+            done();
+        });
+    });
+
+    it('returns a user name using multiple helpers', function (done) {
+
+        makeRequest('/user/5/name', function (res) {
+
+            expect(res).to.equal('Bob');
             done();
         });
     });
@@ -170,7 +227,7 @@ describe('Prerequesites', function () {
 
         var test = function () {
 
-            server.addRoute({
+            server.route({
                 method: 'GET',
                 path: '/x/{id}',
                 config: {
@@ -193,7 +250,7 @@ describe('Prerequesites', function () {
 
         var test = function () {
 
-            server.addRoute({
+            server.route({
                 method: 'GET',
                 path: '/x/{id}',
                 config: {

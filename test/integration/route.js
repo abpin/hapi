@@ -1,8 +1,8 @@
 // Load modules
 
-var Chai = require('chai');
+var Lab = require('lab');
 var Async = require('async');
-var Hapi = require('../helpers');
+var Hapi = require('../..');
 var Route = process.env.TEST_COV ? require('../../lib-cov/route') : require('../../lib/route');
 
 
@@ -13,7 +13,11 @@ var internals = {};
 
 // Test shortcuts
 
-var expect = Chai.expect;
+var expect = Lab.expect;
+var before = Lab.before;
+var after = Lab.after;
+var describe = Lab.experiment;
+var it = Lab.test;
 
 
 describe('Route', function () {
@@ -80,7 +84,7 @@ describe('Route', function () {
 
             request.reply(path);
         };
-    }
+    };
 
     var randomLoad = function () {
 
@@ -92,10 +96,10 @@ describe('Route', function () {
                 var i = Math.floor(Math.random() * (copy.length - 1));
                 var path = copy[i];
                 copy = copy.filter(function (item, index, array) { return index != i; });
-                server.addRoute({ path: path, method: 'GET', handler: handler(path) });
+                server.route({ path: path, method: 'GET', handler: handler(path) });
             }
 
-            var routes = server._routes['get'];
+            var routes = server._router.table['get'];
             var list = [];
             for (var i = 0, il = routes.length; i < il; ++i) {
                 var route = routes[i];
@@ -115,12 +119,12 @@ describe('Route', function () {
     for (var i = 0, il = paths.length; i < il; ++i) {
 
         var path = paths[i];
-        server.addRoute({ path: path, method: 'GET', handler: handler(path) });
+        server.route({ path: path, method: 'GET', handler: handler(path) });
     }
 
     it('sorts routes in right order', function (done) {
 
-        var routes = server._routes['get'];
+        var routes = server._router.table['get'];
         var list = [];
         for (var i = 0, il = routes.length; i < il; ++i) {
             var route = routes[i];

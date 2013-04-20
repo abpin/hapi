@@ -1,57 +1,67 @@
 {
   "name": "hapi",
-  "description": "HTTP API Server framework",
+  "description": "HTTP Server framework",
   "homepage": "http://hapijs.com",
-  "version": "0.12.0",
+  "version": "1.0.0",
   "author": "Eran Hammer <eran@hueniverse.com> (http://hueniverse.com)",
   "contributors": [
-    "Van Nguyen <the.gol.effect@gmail.com>",
-    "Wyatt Preul <wpreul@gmail.com>"
+    {
+      "name": "Van Nguyen",
+      "email": "the.gol.effect@gmail.com"
+    },
+    {
+      "name": "Wyatt Preul",
+      "email": "wpreul@gmail.com"
+    }
   ],
-  "repository": "git://github.com/walmartlabs/hapi",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/spumko/hapi"
+  },
   "main": "index",
   "keywords": [
     "framework",
     "http",
-    "authentication",
     "api",
     "router"
   ],
   "engines": {
-    "node": ">=0.8.0"
+    "node": "0.10.x"
   },
   "dependencies": {
-    "hoek": "0.2.x",
-    "boom": "0.2.x",
-    "joi": "0.0.x",
-    "lout": "0.0.x",
-    "hapi-helmet": "0.0.x",
-    "hapi-log": "0.0.x",
-    "hawk": "0.6.x",
-    "shot": "0.0.x",
-    "oz": "0.0.x",
-    "async": "0.1.x",
-    "request": "2.11.x",
+    "hoek": "0.8.x",
+    "boom": "0.4.x",
+    "joi": "0.3.x",
+    "catbox": "0.5.x",
+    "hawk": "0.13.x",
+    "shot": "0.2.x",
+    "cryptiles": "0.2.x",
+    "iron": "0.3.x",
+    "async": "0.2.x",
+    "request": "2.16.x",
     "formidable": "1.0.x",
     "mime": "1.2.x",
-    "catbox": "0.1.x",
-    "cryptiles": "0.0.x",
-    "iron": "0.1.x"
+    "lru-cache": "2.3.x",
+    "optimist": "0.3.x",
+    "negotiator": "0.2.x",
+    "semver": "1.1.x"
   },
   "devDependencies": {
-    "mocha": "1.x.x",
-    "chai": "1.x.x",
-    "sinon": "1.x.x",
-    "handlebars": ">= 1.0.8",
-    "jade": "~0.28.1"
+    "lab": "0.1.x",
+    "handlebars": "1.0.x",
+    "jade": "0.28.x",
+    "complexity-report": "0.x.x"
+  },
+  "bin": {
+    "hapi": "./bin/hapi"
   },
   "scripts": {
-    "test": "make test && make unit"
+    "test": "make test-cov"
   },
   "licenses": [
     {
       "type": "BSD",
-      "url": "http://github.com/walmartlabs/hapi/raw/master/LICENSE"
+      "url": "http://github.com/spumko/hapi/raw/master/LICENSE"
     }
   ]
 }

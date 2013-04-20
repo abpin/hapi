@@ -1,9 +1,10 @@
 // Load modules
 
-var Chai = require('chai');
+var Lab = require('lab');
 var Fs = require('fs');
 var Request = require('request');
-var Hapi = require('../helpers');
+var Zlib = require('zlib');
+var Hapi = require('../..');
 
 
 // Declare internals
@@ -13,142 +14,174 @@ var internals = {};
 
 // Test shortcuts
 
-var expect = Chai.expect;
+var expect = Lab.expect;
+var before = Lab.before;
+var after = Lab.after;
+var describe = Lab.experiment;
+var it = Lab.test;
 
 
 describe('Proxy', function () {
 
-    before(startServer);
+    var server = null;
 
-    var _server = null;
+    before(function (done) {
 
-    function startServer (done) {
+        // Define backend handlers
 
-        var routeCache = {
-            expiresIn: 500
+        var mapUriWithError = function (request, callback) {
+
+            return callback(new Error('myerror'));
         };
 
-        var config = {
-            cache: {
-                engine: 'memory',
-                host: '127.0.0.1',
-                port: 6379
+        var profile = function () {
+
+            if (this.state.test) {
+                return this.reply('error');
             }
+
+            var profile = {
+                'id': 'fa0dbda9b1b',
+                'name': 'John Doe'
+            };
+
+            this.reply(profile).state('test', '123');
         };
 
-        var dummyServer = new Hapi.Server('0.0.0.0', 0);
-        dummyServer.addRoutes([
+        var activeItem = function () {
+
+            this.reply({
+                'id': '55cf687663',
+                'name': 'Active Item'
+            });
+        };
+
+        var item = function () {
+
+            this.reply({
+                'id': '55cf687663',
+                'name': 'Item'
+            }).created('http://example.com');
+        };
+
+        var echoPostBody = function () {
+
+            this.reply(this.payload);
+        };
+
+        var unauthorized = function () {
+
+            this.reply(Hapi.error.unauthorized('Not authorized'));
+        };
+
+        var postResponseWithError = function (request) {
+
+            request.reply(Hapi.error.forbidden('Forbidden'));
+        };
+
+        var streamHandler = function () {
+
+            this.reply('success');
+        };
+
+        var forward = function () {
+
+            expect(this.raw.req.headers['x-forwarded-for']).to.contain('xforwardfor');
+            expect(this.raw.req.headers['x-forwarded-port']).to.contain('9000');
+            expect(this.raw.req.headers['x-forwarded-proto']).to.contain('xforwardproto');
+            this.reply('Success');
+        };
+
+        var headers = function () {
+
+            this.reply({ status: 'success' })
+                      .header('Custom1', 'custom header value 1')
+                      .header('X-Custom2', 'custom header value 2')
+                      .header('access-control-allow-headers', 'Invalid, List, Of, Values');
+        };
+
+        var gzipHandler = function () {
+
+            this.reply('123456789012345678901234567890123456789012345678901234567890');
+        };
+
+        var gzipStreamHandler = function () {
+
+            this.reply(new Hapi.response.File(__dirname + '/../../package.json'));
+        };
+
+        var upstream = new Hapi.Server(0);
+        upstream.route([
             { method: 'GET', path: '/profile', handler: profile },
             { method: 'GET', path: '/item', handler: activeItem },
             { method: 'GET', path: '/proxyerror', handler: activeItem },
             { method: 'POST', path: '/item', handler: item },
             { method: 'GET', path: '/unauthorized', handler: unauthorized },
             { method: 'POST', path: '/file', handler: streamHandler, config: { payload: 'stream' } },
-            { method: 'POST', path: '/echo', handler: echoPostBody }
+            { method: 'POST', path: '/echo', handler: echoPostBody },
+            { method: 'GET', path: '/headers', handler: headers },
+            { method: 'GET', path: '/noHeaders', handler: headers },
+            { method: 'GET', path: '/forward', handler: forward },
+            { method: 'GET', path: '/gzip', handler: gzipHandler },
+            { method: 'GET', path: '/gzipstream', handler: gzipStreamHandler }
         ]);
 
         var mapUri = function (request, callback) {
 
-            return callback(null, dummyServer.settings.uri + request.path, request.query);
+            return callback(null, upstream.info.uri + request.path + (request.url.search || ''));
         };
 
-        _server = new Hapi.Server('0.0.0.0', 0, config);
+        upstream.start(function () {
 
-        dummyServer.start(function () {
+            var backendPort = upstream.info.port;
+            var routeCache = { expiresIn: 500, mode: 'server+client' };
 
-            var dummyPort = dummyServer.settings.port;
-
-            _server.addRoutes([
-                { method: 'GET', path: '/profile', handler: { proxy: { host: '127.0.0.1', port: dummyPort, xforward: true, passThrough: true } } },
-                { method: 'GET', path: '/item', handler: { proxy: { host: '127.0.0.1', port: dummyPort } }, config: { cache: routeCache } },
-                { method: 'GET', path: '/unauthorized', handler: { proxy: { host: '127.0.0.1', port: dummyPort } }, config: { cache: routeCache } },
-                { method: 'POST', path: '/item', handler: { proxy: { host: '127.0.0.1', port: dummyPort } } },
-                { method: 'POST', path: '/notfound', handler: { proxy: { host: '127.0.0.1', port: dummyPort } } },
-                { method: 'GET', path: '/proxyerror', handler: { proxy: { host: '127.0.0.1', port: dummyPort } }, config: { cache: routeCache } },
-                { method: 'GET', path: '/postResponseError', handler: { proxy: { host: '127.0.0.1', port: dummyPort, postResponse: postResponseWithError } }, config: { cache: routeCache } },
-                { method: 'GET', path: '/errorResponse', handler: { proxy: { host: '127.0.0.1', port: dummyPort } }, config: { cache: routeCache } },
+            server = new Hapi.Server(0, { cors: true });
+            server.route([
+                { method: 'GET', path: '/profile', handler: { proxy: { host: 'localhost', port: backendPort, xforward: true, passThrough: true } } },
+                { method: 'GET', path: '/item', handler: { proxy: { host: 'localhost', port: backendPort } }, config: { cache: routeCache } },
+                { method: 'GET', path: '/unauthorized', handler: { proxy: { host: 'localhost', port: backendPort } }, config: { cache: routeCache } },
+                { method: 'POST', path: '/item', handler: { proxy: { host: 'localhost', port: backendPort } } },
+                { method: 'POST', path: '/notfound', handler: { proxy: { host: 'localhost', port: backendPort } } },
+                { method: 'GET', path: '/proxyerror', handler: { proxy: { host: 'localhost', port: backendPort } }, config: { cache: routeCache } },
+                { method: 'GET', path: '/postResponseError', handler: { proxy: { host: 'localhost', port: backendPort, postResponse: postResponseWithError } }, config: { cache: routeCache } },
+                { method: 'GET', path: '/errorResponse', handler: { proxy: { host: 'localhost', port: backendPort } }, config: { cache: routeCache } },
                 { method: 'POST', path: '/echo', handler: { proxy: { mapUri: mapUri } } },
-                { method: 'POST', path: '/file', handler: { proxy: { host: '127.0.0.1', port: dummyPort } }, config: { payload: 'stream' } },
-                { method: 'GET', path: '/maperror', handler: { proxy: { mapUri: mapUriWithError } } }
+                { method: 'POST', path: '/file', handler: { proxy: { host: 'localhost', port: backendPort } }, config: { payload: 'stream' } },
+                { method: 'GET', path: '/maperror', handler: { proxy: { mapUri: mapUriWithError } } },
+                { method: 'GET', path: '/forward', handler: { proxy: { host: 'localhost', port: backendPort, xforward: true, passThrough: true } } },
+                { method: 'GET', path: '/headers', handler: { proxy: { host: 'localhost', port: backendPort, passThrough: true } } },
+                { method: 'GET', path: '/noHeaders', handler: { proxy: { host: 'localhost', port: backendPort } } },
+                { method: 'GET', path: '/gzip', handler: { proxy: { host: 'localhost', port: backendPort, passThrough: true } } },
+                { method: 'GET', path: '/gzipstream', handler: { proxy: { host: 'localhost', port: backendPort, passThrough: true } } }
             ]);
 
-            _server.start(function () {
+            server.state('auto', { autoValue: 'xyz' });
+            server.start(function () {
 
                 done();
             });
         });
-    }
+    });
 
-    function mapUriWithError (request, callback) {
-
-        return callback(new Error('myerror'));
-    }
-
-    function profile (request) {
-
-        request.reply({
-            'id': 'fa0dbda9b1b',
-            'name': 'John Doe'
-        });
-    }
-
-    function activeItem (request) {
-
-        request.reply({
-            'id': '55cf687663',
-            'name': 'Active Item'
-        });
-    }
-
-    function item (request) {
-
-        request.reply.payload({
-            'id': '55cf687663',
-            'name': 'Item'
-        }).created('http://google.com').send();
-    }
-
-    function echoPostBody (request) {
-
-        request.reply(request.payload);
-    }
-
-    function unauthorized (request) {
-
-        request.reply(Hapi.Error.unauthorized('Not authorized'));
-    }
-
-    function postResponseWithError (request) {
-
-        request.reply(Hapi.Error.forbidden('Forbidden'));
-    }
-
-    function postResponse (request, settings, response, payload) {
-
-        request.reply.payload(payload).type(response.headers['content-type']).send();
-    }
-
-    function streamHandler (request) {
-
-        request.reply('success');
-    }
-
-    function makeRequest (options, callback) {
-
-        var next = function (err, res) {
-
-            return callback(res);
-        };
+    function makeRequest(options, callback) {
 
         options = options || {};
         options.path = options.path || '/';
         options.method = options.method || 'get';
 
-        Request({
+        var req = {
             method: options.method,
-            url: _server.settings.uri + options.path,
-            form: options.form
-        }, next);
+            url: server.info.uri + options.path,
+            form: options.form,
+            headers: options.headers,
+            jar: false
+        };
+
+        Request(req, function (err, res) {
+
+            callback(res);
+        });
     }
 
     it('forwards on the response when making a GET request', function (done) {
@@ -157,6 +190,79 @@ describe('Proxy', function () {
 
             expect(rawRes.statusCode).to.equal(200);
             expect(rawRes.body).to.contain('John Doe');
+            expect(rawRes.headers['set-cookie']).to.deep.equal(['test=123','auto=xyz']);
+            
+            makeRequest({ path: '/profile' }, function (rawRes) {
+
+                expect(rawRes.statusCode).to.equal(200);
+                expect(rawRes.body).to.contain('John Doe');
+                done();
+            });
+        });
+    });
+
+    it('forwards on x-forward headers', function (done) {
+
+        makeRequest({ path: '/forward', headers: { 'x-forwarded-for': 'xforwardfor', 'x-forwarded-port': '9000', 'x-forwarded-proto': 'xforwardproto' } }, function (rawRes) {
+
+            expect(rawRes.statusCode).to.equal(200);
+            expect(rawRes.body).to.equal('Success');
+            done();
+        });
+    });
+
+    it('forwards upstream headers', function (done) {
+
+        server.inject({ url: '/headers', method: 'GET' }, function (res) {
+
+            expect(res.statusCode).to.equal(200);
+            expect(res.result).to.equal('{\"status\":\"success\"}');
+            expect(res.headers.custom1).to.equal('custom header value 1');
+            expect(res.headers['x-custom2']).to.equal('custom header value 2');
+            expect(res.headers['access-control-allow-headers']).to.equal('Authorization, Content-Type, If-None-Match');
+            expect(res.headers['access-control-expose-headers']).to.equal('WWW-Authenticate, Server-Authorization');
+            done();
+        });
+    });
+
+    it('forwards gzipped content', function (done) {
+
+        Zlib.gzip(new Buffer('123456789012345678901234567890123456789012345678901234567890'), function (err, zipped) {
+
+            makeRequest({ path: '/gzip', method: 'GET', headers: { 'accept-encoding': 'gzip' } }, function (res) {
+
+                expect(res.statusCode).to.equal(200);
+                expect(res.body).to.equal(zipped.toString());
+                done();
+            });
+        });
+    });
+
+    it('forwards gzipped stream', function (done) {
+
+        makeRequest({ path: '/gzipstream', method: 'GET', headers: { 'accept-encoding': 'gzip' } }, function (res) {
+
+            expect(res.statusCode).to.equal(200);
+
+            Fs.readFile(__dirname + '/../../package.json', function (err, file) {
+
+                Zlib.gzip(file, function (err, zipped) {
+
+                    expect(zipped.toString()).to.equal(res.body);
+                    done();
+                });
+            });
+        });
+    });
+
+    it('does not forward upstream headers without passThrough', function (done) {
+
+        makeRequest({ path: '/noHeaders' }, function (rawRes) {
+
+            expect(rawRes.statusCode).to.equal(200);
+            expect(rawRes.body).to.equal('{\"status\":\"success\"}');
+            expect(rawRes.headers.custom1).to.not.exist;
+            expect(rawRes.headers['x-custom2']).to.not.exist;
             done();
         });
     });
@@ -224,7 +330,7 @@ describe('Proxy', function () {
             callback(new Error());
         };
 
-        var route = _server._match('get', '/proxyerror');
+        var route = server._router.route({ method: 'get', path: '/proxyerror', raw: { req: { headers: {} } } });
         route.proxy.httpClient = requestStub;
 
         makeRequest({ path: '/proxyerror', method: 'get' }, function (rawRes) {
@@ -255,10 +361,22 @@ describe('Proxy', function () {
 
     it('works with a stream when the proxy response is streamed', function (done) {
 
-        Fs.createReadStream(__dirname + '/proxy.js').pipe(Request.post(_server.settings.uri + '/file', function (err, rawRes, body) {
+        Fs.createReadStream(__dirname + '/proxy.js').pipe(Request.post(server.info.uri + '/file', function (err, rawRes, body) {
 
             expect(rawRes.statusCode).to.equal(200);
             done();
         }));
-    }); 
+    });
+
+    it('can add a proxy route with a http protocol set', function (done) {
+
+        server.route({ method: 'GET', path: '/httpport', handler: { proxy: { host: 'localhost', protocol: 'http' } } });
+        done();
+    });
+
+    it('can add a proxy route with a https protocol set', function (done) {
+
+        server.route({ method: 'GET', path: '/httpsport', handler: { proxy: { host: 'localhost', protocol: 'https' } } });
+        done();
+    });
 });
